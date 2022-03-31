@@ -77,7 +77,6 @@ class MqttClientConn:
             client.on_log = MqttClientConn.on_log
             client.on_publish = MqttClientConn.on_publish
             client.connect(self.host, self.port, keepalive=60)
-            client.subscribe("fwent/edge/171de0153fae20f8/outbound")
             return client
         except Exception:
             pass
