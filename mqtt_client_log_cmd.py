@@ -1,4 +1,3 @@
-
 from paho.mqtt import client as mqtt_client
 import time
 import socket
@@ -9,7 +8,6 @@ from datetime import timezone
 from datetime import datetime
 import sys
 import argparse
-
 
 
 parser = argparse.ArgumentParser()
@@ -30,6 +28,7 @@ try:
 except Exception:
   pass
 
+
 file_handler = logging.FileHandler('mqtt_client.log')
 file_handler.setFormatter(formatter)
 if str(console).lower() == "true":
@@ -38,16 +37,14 @@ if str(console).lower() == "true":
 logger.addHandler(file_handler)
 
 
-    
-
-
 class MqttClientConn:
     """
     This class can be used to establish a connection to Fogwing IoTHub
     and publish the machines data/payload.
     """
-
-    def __init__(self, host, port, usr_name, pwd, client_id, pub_topic, frq):
+    mid_value = None    
+    
+    def __init__(self, host, port, usr_name, pwd, client_id, pub_topic, frq_in_sec):
         """
         :param host:        Fogwing IoTHub broker/host address(default: iothub.enterprise.fogwing.net).
         :param port:        Fogwing IoTHub broker/host port(default: 1883)
@@ -62,9 +59,9 @@ class MqttClientConn:
         self.pwd = pwd
         self.clientid = client_id
         self.pub_topic = pub_topic
-        self.frq = frq
-        global mid_value
-
+        self.frq_in_sec = frq_in_sec 
+      
+        
     def connect_mqtt(self):
         """
         This method connect to Fogwing IoTHub.
@@ -74,12 +71,14 @@ class MqttClientConn:
         try:
             client = mqtt_client.Client(self.clientid)
             client.username_pw_set(self.usr_name, self.pwd)
+            if self.port == 8883:
+                client.tls_set_context(context=None)
             client.on_connect = MqttClientConn.on_connect
             client.on_log = MqttClientConn.on_log
             client.on_publish = MqttClientConn.on_publish
             client.connect(self.host, self.port, keepalive=60)
+            client.subscribe("fwent/edge/171de0153fae20f8/outbound")
             return client
-  
         except Exception:
             pass
 
@@ -91,14 +90,16 @@ class MqttClientConn:
         """
         try:
             rc, mid = client.publish(self.pub_topic, payload, qos=1, retain=False)
-            if rc == 0:
+            if rc == 0 and mid == int(MqttClientConn.mid_value):
                 time.sleep(0.5)
-                logger.info(f'Fogwing IoTHub: Published data to Fogwing IoTHub')
-                logger.info(json.dumps(json.loads(payload), indent=2))
+                logger.info(f'Fogwing IoTHub: Published data to Fogwing IoTHub\n')
+                logger.info(f'payload: {json.dumps(json.loads(payload), indent=2)}\n')
                 logger.debug(f'Fogwing IoTHub: rc: {rc} and mid: {mid}')
-            return rc, mid
+            else:
+                logger.info(f'Fogwing IoTHub: Failed to publish data to Fogwing IoTHub')
+                logger.debug(f'Fogwing IoTHub: rc: {rc} and mid: {mid}')
         except Exception:
-            logger.exception("Exception in sendtofwg method")
+            logger.exception("Exception in sendtofwg method\n")
        
 
               
@@ -113,10 +114,12 @@ class MqttClientConn:
                             MQTT_LOG_ERR, and MQTT_LOG_DEBUG.
         :param buf:         the message itself
         """
-        logger.debug(f"Fogwing IoT Hub: {buf}")
-        # mid_value = buf[buf.index("m") + 1:buf.index(')')]
-
-    @staticmethod
+        logger.debug(f"Fogwing IoTHub: {buf}")
+        mid_value = buf[buf.index("m") + 1:buf.index(')')]
+        MqttClientConn.mid_value = mid_value
+        
+        
+    #@staticmethod
     def on_publish(client, userdata, mid):
         """
         This callback called when a message that was to be sent using the publish() call has
@@ -132,8 +135,9 @@ class MqttClientConn:
         :param mid:         matches the mid variable returned from the corresponding
                             publish() call, to allow outgoing messages to be tracked.
         """
+  
         logger.debug(f"Fogwing IoTHub: On publish mid: {mid}")
-        MqttClientConn.mid_value = mid
+    
 
     @staticmethod
     def on_connect(client, userdata, flags, rc):
@@ -158,11 +162,13 @@ class MqttClientConn:
             5: Connection refused - not authorised
             6-255: Currently unused.
         """
+        
         if rc == 0:
-            logger.info("Connected to Fogwing IoTHub")
+            logger.info("Fogwing IoTHub: Connected to Fogwing IoTHub")
         else:
-            logger.info("Failed to connect to Fogwing IoTHub, return code:", str(rc))
-
+            logger.info("Fogwing IoTHub: Failed to connect to Fogwing IoTHub, return code:", str(rc))
+            
+           
     def net_conectivity(self):
 
         """
@@ -183,16 +189,16 @@ class MqttClientConn:
             local_time = datetime.now()
             epoch_time_utc = datetime.now(timezone.utc).replace(tzinfo=timezone.utc).replace(microsecond=0).timestamp()
             return str(epoch_time_utc).rstrip(".0"), local_time.strftime("%d %b %Y"), local_time.strftime("%I:%M:%S %p")
-        except Exception as exptn:
-            return exptn
+        except Exception:
+            pass
 
 
 if __name__ == '__main__':
 
     connect_mqtt = False
-    mqtt = MqttClientConn(host='iothub.enterprise.fogwing.net', port=1883,
+    mqtt = MqttClientConn(host='iothub.enterprise.fogwing.net', port=8883,
                               pub_topic='fwent/edge/171de0153fae20f8/inbound',
-                              usr_name='ajaykanojiya', pwd='Ajaya@123', client_id='1151-1103-1080-1002', frq=5)
+                              usr_name='ajaykanojiya', pwd='Ajaya@123', client_id='1151-1103-1080-1002', frq_in_sec=30)
         
     while True: 
         logger.info("-----------------------------------------------{}---------------------------------------------------------------".format(level_type))
@@ -209,16 +215,20 @@ if __name__ == '__main__':
                     data = {"date": date, "time": Time, "weight": weight}
                     mqtt.sendtofwg(client, json.dumps(data)) 
             else:   
-                logger.info("No Internet.. Please check the internet connection")        
+                logger.info("Fogwing IoTHub: No Internet.. Please check the internet connection...")        
         except AttributeError as e:  
-            logger.info("No Internet.. Please check the internet connection")
+            logger.info("Fogwing IoTHub: Client object is None, probably due to invalid credentials or No internet.")
         except Exception:
             pass
         finally:
-            client.loop_stop()
-            client.disconnect()
-            connect_mqtt = False
-        time.sleep(mqtt.frq)
+            try:
+                if mqtt.frq_in_sec > 120:
+                    client.loop_stop()
+                    client.disconnect()
+                    connect_mqtt = False
+            except Exception:
+                pass
+        time.sleep(mqtt.frq_in_sec)
 
 
 
