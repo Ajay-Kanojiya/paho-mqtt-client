@@ -195,9 +195,9 @@ class MqttClientConn:
 if __name__ == '__main__':
 
     connect_mqtt = False
-    mqtt = MqttClientConn(host='iothub.enterprise.fogwing.net', port=8883,
-                              pub_topic='fwent/edge/171de0153fae20f8/inbound',
-                              usr_name='ajaykanojiya', pwd='Ajaya@123', client_id='1151-1103-1080-1002', frq_in_sec=30)
+    mqtt = MqttClientConn(host='xxxxxxxxxxxxx', port=8883,
+                              pub_topic='xxxxxxxxxxxxx',
+                              usr_name='xxxxxxxxxxxxx', pwd='xxxxxxxxxxxxx', client_id='xxxxxxxxxxxxx', frq_in_sec=30)
         
     while True: 
         logger.info("-----------------------------------------------{}---------------------------------------------------------------".format(level_type))
